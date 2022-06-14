@@ -734,3 +734,42 @@ ggsave("./output/plots/SigInstallDecadeGT2.png", width = wdt, height = hgt, unit
 
 ```
 
+```{r}
+gt.inc %>%
+  mutate(INSTALLATION_YEAR = parse_number(INSTALLATION_YEAR,                 
+                                          na = c("NA","UNKNOWN","N/A")),    
+         INSTALLATION_YEAR = replace_na(INSTALLATION_YEAR, 1930),           
+         INSTALLATION_DECADE = INSTALLATION_YEAR - INSTALLATION_YEAR %% 10,
+         INSTALLATION_DECADE = if_else(INSTALLATION_DECADE <= 1930, 1930, INSTALLATION_DECADE))%>%
+  filter(SIGNIFICANT == "YES",   
+         ON_OFF_SHORE == "ONSHORE",  
+         IYEAR !=2022,
+         IYEAR > 2011,
+         INSTALLATION_DECADE != 2020)%>%
+  left_join(gtMileNorm,                   
+            by = c("INSTALLATION_DECADE" = "name", "IYEAR" = "Calendar.Year"),             
+            keep = T)%>%                                                        
+  #filter(!is.na(value))%>%                                                  
+  group_by(INSTALLATION_DECADE, IYEAR)%>%                                       
+  summarise(n = n(),                                                         
+            miles = mean(value),                                             
+            ipm = n/(miles/1000)) %>%                                         
+  group_by(INSTALLATION_DECADE)%>%            
+  mutate(count = if_else(INSTALLATION_DECADE == 2020, 
+                         as.integer(2),
+                         as.integer(12)))%>%
+  mutate(total = sum(n),   
+            iyear = IYEAR, 
+            w.ipm = ipm * (n/total),   
+            count = count,
+            s.ipm = round(sum(w.ipm)*count,1),
+         w = n/total)%>%                            
+  distinct(INSTALLATION_DECADE, iyear,.keep_all = T)%>% 
+  ggplot(aes(x = iyear, y = ipm, group = as.factor(INSTALLATION_DECADE), color = as.factor(INSTALLATION_DECADE)))+
+  geom_point()+
+  geom_line()+
+  scale_color_brewer(palette = "Spectral", name = "Decade Installed")+
+  theme_pst()
+
+```
+
