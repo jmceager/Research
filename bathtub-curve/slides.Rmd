@@ -15,7 +15,6 @@ editor_options:
 rm(list = ls())
 ```
 
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, include = FALSE)
 
@@ -35,7 +34,7 @@ library(rgdal)
 library(showtext)
 
 
-datadir <- "/Users/jameseager/Documents/projects/PHMSA_clean/data/"
+datadir <- "/Users/jameseager/Documents/proj/phmsa-clean/data/"
 capt = "Source: PHMSA Incident and Mileage Data (2010-2021)"
 tag = "PST 2022"
 ```
@@ -131,7 +130,6 @@ gtPD <- read_csv(paste0(datadir,"incidents/GTOPSI.csv")) %>%
   rename(REPORT_NUMBER = `Report ID`)
 ```
 
-
 ```{r normalize bathtubs by miles}
 #ok
 gtMileNorm <- df.gt %>% 
@@ -158,24 +156,24 @@ hlMileNorm <- df.hl %>%
 
 ```
 
-## Definitions 
+## Definitions
 
-- Installation Year: The year a failed part was put in place (not necessarily manufactured): usually grouped by decade in this analysis
-    + manufactured vs install year is hard to compare since the former is rarely given 
-- Decade-year: Referring to the rate of pipeline failure attributable to a given install decade in a specific incident year  
-    + i.e. The rate of 1960's incidents in 2015
-- Incident Rate: Always given in incidents per 1,000 miles in this presentation 
-- Period of Interest: 2012 to 2021, but we *can* go back to 2010 
-    + sticking to PHMSA's timeline just for ease of comparison for now
-- In plots, PHMSA or PST U is for unweighted averages, while PHMSA or PST W is a weighted average
+-   Installation Year: The year a failed part was put in place (not necessarily manufactured): usually grouped by decade in this analysis
+    -   manufactured vs install year is hard to compare since the former is rarely given
+-   Decade-year: Referring to the rate of pipeline failure attributable to a given install decade in a specific incident year
+    -   i.e. The rate of 1960's incidents in 2015
+-   Incident Rate: Always given in incidents per 1,000 miles in this presentation
+-   Period of Interest: 2012 to 2021, but we *can* go back to 2010
+    -   sticking to PHMSA's timeline just for ease of comparison for now
+-   In plots, PHMSA or PST U is for unweighted averages, while PHMSA or PST W is a weighted average
 
-
-## Aligning with PHMSA 
+## Aligning with PHMSA
 
 #### GT Incident Characteristics:
-- 10 most recent *complete* calendar years (2012-2021)
-- Significant
-- *Onshore* Pipeline, including valve sites
+
+-   10 most recent *complete* calendar years (2012-2021)
+-   Significant
+-   *Onshore* Pipeline, including valve sites
 
 ```{r echo=TRUE, eval=FALSE, include = TRUE}
 gt.inc %>%
@@ -192,15 +190,11 @@ gt.inc %>%
 
 ```
 
-
-
 ## PHMSA's Graph
 
-![](./imports/PHMSAScreen.png){width=90%}
-
+![](./imports/PHMSAScreen.png){width="90%"}
 
 ## My Graph
-
 
 ```{r matching phmsa?, include = TRUE, message = FALSE}
 #years to decade
@@ -310,38 +304,32 @@ rbind(gtpstW, gt2, gtphmsaU, gtphmsaW)%>%
        x = "Installation Decade")
 ```
 
+## Misalignment
 
-
-
-## Misalignment  
-
-- Approach to "averages" 
-    + Weighted mean takes into account changes in incidents counts and mileage 
-- Weird math in PHMSA's 2020s: SQL or other issues? 
-- Inclusion of other incident parts and locations  
-    + Parts: compressor stations, storage, regulator/metering   
-    + Locations: offshore (platforms?)
-- Another consideration is potentially examining incidents by age of part at the time of incident 
-    + A little less clear when it comes to using mileage by decade
-
+-   Approach to "averages"
+    -   Weighted mean takes into account changes in incidents counts and mileage
+-   Weird math in PHMSA's 2020s: SQL or other issues?
+-   Inclusion of other incident parts and locations
+    -   Parts: compressor stations, storage, regulator/metering\
+    -   Locations: offshore (platforms?)
+-   Another consideration is potentially examining incidents by age of part at the time of incident
+    -   A little less clear when it comes to using mileage by decade
 
 ## Arithmetic Mean
+
 $$
 \mu_d =  \frac{\sum_{y = 2012}^{2021}Inc_{dy}}{\sum_{y = 2012}^{2021}Miles_{dy}}
 $$
 
-- $Inc$ = Number of incidents in a given period 
-- $d$ = Decade of a given installation year (40s through 2020s)
-- $y$ = Year incident occurred (2011-2021)
-- $\mu$ = Average incident rate for a given $d$
+-   $Inc$ = Number of incidents in a given period
+-   $d$ = Decade of a given installation year (40s through 2020s)
+-   $y$ = Year incident occurred (2011-2021)
+-   $\mu$ = Average incident rate for a given $d$
 
+## Weighted Mean
 
+How do we "weigh" the mean? By adjusting the raw incident rate in a given decade-year. Notice that this time $\mu_{dy}$ is only for a specific decade-year ($dy$) and $mu_d$ involves multiplying the sum of $\mu_{dy}$ by the number of possible incident years it includes (10, except in the 2020's).
 
-
-## Weighted  Mean
-
-How do we "weigh" the mean? By adjusting the raw incident rate in a given decade-year. Notice that this time $\mu_{dy}$ is only for a specific decade-year ($dy$) and $mu_d$ involves multiplying the sum of $\mu_{dy}$ by the number of possible incident years it includes (10, except in the 2020's). 
-  
 $$
 \begin{aligned}
   \mu_{dy} = \frac{Inc_{dy}}{Mileage_{dy}}* \frac{Inc_{dy}}{Inc_{d}}\\
@@ -349,6 +337,50 @@ $$
 \end{aligned}
 $$
 
+## Weighted Mean Plot
+
+```{r decade year plots, include = TRUE, message = FALSE}
+gt.inc %>%
+  mutate(INSTALLATION_YEAR = parse_number(INSTALLATION_YEAR,                 
+                                          na = c("NA","UNKNOWN","N/A")),    
+         INSTALLATION_YEAR = replace_na(INSTALLATION_YEAR, 1930),           
+         INSTALLATION_DECADE = INSTALLATION_YEAR - INSTALLATION_YEAR %% 10,
+         INSTALLATION_DECADE = if_else(INSTALLATION_DECADE <= 1930, 1930, INSTALLATION_DECADE))%>%
+  filter(SIGNIFICANT == "YES",   
+         ON_OFF_SHORE == "ONSHORE",  
+         IYEAR !=2022,
+         IYEAR > 2011,
+         INSTALLATION_DECADE != 2020)%>%
+  left_join(gtMileNorm,                   
+            by = c("INSTALLATION_DECADE" = "name", "IYEAR" = "Calendar.Year"),             
+            keep = T)%>%                                                        
+  #filter(!is.na(value))%>%                                                  
+  group_by(INSTALLATION_DECADE, IYEAR)%>%                                       
+  summarise(n = n(),                                                         
+            miles = mean(value),                                             
+            ipm = n/(miles/1000)) %>%                                         
+  group_by(INSTALLATION_DECADE)%>%            
+  mutate(count = if_else(INSTALLATION_DECADE == 2020, 
+                         as.integer(2),
+                         as.integer(12)))%>%
+  mutate(total = sum(n),   
+            iyear = IYEAR, 
+            w.ipm = ipm * (n/total),   
+            count = count,
+            s.ipm = round(sum(w.ipm)*count,1),
+         w = n/total)%>%                            
+  distinct(INSTALLATION_DECADE, iyear,.keep_all = T)%>% 
+  ggplot(aes(x = iyear, y = ipm, group = as.factor(INSTALLATION_DECADE), color = as.factor(INSTALLATION_DECADE)))+
+  geom_point(aes(size = w), alpha = .8)+
+  geom_line()+
+  scale_color_brewer(palette = "Spectral", name = "Decade Installed", labels = c("Pre-40s\n& Unkown",seq(1940,2010,10)))+
+  scale_size_continuous(name = "Weight")+
+  theme_pst()+
+  labs(x = "Incident Year", y = "Incidents per 1K Miles", 
+       title = "Decade-Year Incident Rate Trends",
+       subtitle = "Significant Incidents of Onshore Gas Transmission Lines from the 1940s to Present" )
+
+```
 
 ## What about the 2020s?
 
@@ -374,12 +406,12 @@ gt.inc %>%
   kable_classic_2()
 
 ```
-<br>
-1 incident in a year with 3,628 miles offers a rate of .28 for the year. Due to a lack of 20-20 decade-year incidents, the weighted average is .56 while the unweighted is .14. Either way, a single incident in a single year is basically statistical noise, and inconclusive. 
+
+<br> 1 incident in a year with 3,628 miles offers a rate of .28 for the year. Due to a lack of 20-20 decade-year incidents, the weighted average is .56 while the unweighted is .14. Either way, a single incident in a single year is basically statistical noise, and inconclusive.
 
 ## Adjusting the Filters
 
-So how may incidents are we actually looking at? 
+So how may incidents are we actually looking at?
 
 ```{r pressure, include = T, message = F}
 modeFind <- function(x) {
@@ -412,15 +444,15 @@ gt.inc %>%
 
 ## In Short:
 
-- 677 in the time period we are looking at
-- 59% are currently included in PHMSA's analysis
-- Offshore incidents (which we have mileage for, sort of) would increase that to 70% of incidents
+-   677 in the time period we are looking at
+-   59% are currently included in PHMSA's analysis
+-   Offshore incidents (which we have mileage for, sort of) would increase that to 70% of incidents
 
 ## Why Don't I Have a Plot Including Offshore Incidents?
 
-"User hostile" doesn't even begin to touch how much more complicated the offshore mileage reporting is. Aside pipeline with OCSG, OCSP, and OCSAT in the State column, the per-decade mileage of offshore pipeline is slightly unclear and requires some investigation with PHMSA. 
+"User hostile" doesn't even begin to touch how much more complicated the offshore mileage reporting is. Aside pipeline with OCSG, OCSP, and OCSAT in the State column, the per-decade mileage of offshore pipeline is slightly unclear and requires some investigation with PHMSA.
 
-It seems like in some cases offshore and onshore mileage reporting is mixed, so why is PHMSA reporting rates for only onshore? I have no idea, but the more I investigate this topic the more confused I am about everything I've heard from them. Also, I have only just noticed the PHMSA column in the incident data that mentions OCS incidents, and just haven't incorporated that yet.  
+It seems like in some cases offshore and onshore mileage reporting is mixed, so why is PHMSA reporting rates for only onshore? I have no idea, but the more I investigate this topic the more confused I am about everything I've heard from them. Also, I have only just noticed the PHMSA column in the incident data that mentions OCS incidents, and just haven't incorporated that yet.
 
 ## What About Other Onshore Parts?
 
@@ -501,12 +533,11 @@ rbind(gtpstW, gtphmsaW)%>%
        x = "Installation Decade")
 ```
 
+## Installation Decades and Failed Parts \| Description
 
-## Installation Decades and Failed Parts | Description
+This next plot is a bit confusing so needs a bit more introduction. It shows the percentage of significant incidents attributable to a specific part that was installed in a given decade. In other words, one of two incidents attributable to Aboveground Storage occurred on a storage part that was installed in the 1980s, thus the aboveground storage part registers 50% in the 1980s column (the other incident was attributable to AS part installed in the 2020s, so it's 50% there as well). I used percentages here to account for the vastly different incident counts attributable to each part (from 2 to 401), although it is a bit less immediately intuitive. What I hope is visible from this is a relative increase in compressor station and onshore regulator incidents installed after the 1980s (green and orange dots).
 
-This next plot is a bit confusing so needs a bit more introduction. It shows the percentage of significant incidents attributable to a specific part that was installed in a given decade. In other words, one of two incidents attributable to Aboveground Storage occurred on a storage part that was installed in the 1980s, thus the aboveground storage part registers 50% in the 1980s column (the other incident was attributable to AS part installed in the 2020s, so it's 50% there as well). I used percentages here to account for the vastly different incident counts attributable to each part (from 2 to 401), although it is a bit less immediately intuitive. What I hope is visible from this is a relative increase in compressor station and onshore regulator incidents installed after the 1980s (green and orange dots). 
-
-## Installation Decades and Failed Parts | Plot
+## Installation Decades and Failed Parts \| Plot
 
 ```{r message = F, include=T}
 gt.inc %>%
@@ -545,9 +576,10 @@ gt.inc %>%
         legend.background = element_rect(fill = rgb(1,1,1,.6)))
 ```
 
-
 ## Unknown?
-Apparently, the mileage data download has *separate* columns for *Onshore* Pre-40s and Unknown mileage. What does it look like when we separate them? 
+
+Apparently, the mileage data download has *separate* columns for *Onshore* Pre-40s and Unknown mileage. What does it look like when we separate them?
+
 ```{r unknown phmsa?, include = TRUE, message = FALSE}
 #ok
 gtMileNorm <- df.gt %>% 
@@ -667,15 +699,14 @@ rbind(gtpstW, gt2, gtphmsaU, gtphmsaW)%>%
 
 ## Final Q's
 
-*PHMSA*    
+*PHMSA*
 
-- Is there a credible way to handle offshore mileage and incidents? 
-    + If not, why? 
-- Why are they still presenting rates as incidents per 100 miles but calling it per 1,000? 
+-   Is there a credible way to handle offshore mileage and incidents?
+    -   If not, why?
+-   Why are they still presenting rates as incidents per 100 miles but calling it per 1,000?
 
-*PST*    
+*PST*
 
-- Hw do we handle non-pipeline & valve site incidents (compressor stations, storage, etc.)? 
-- How do we handle "unknown" years/decades? 
-- Does using 10 years vs all 12 matter? 
-
+-   Hw do we handle non-pipeline & valve site incidents (compressor stations, storage, etc.)?
+-   How do we handle "unknown" years/decades?
+-   Does using 10 years vs all 12 matter?
