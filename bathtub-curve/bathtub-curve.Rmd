@@ -684,6 +684,42 @@ check <-tibble(decade = gt2$INSTALLATION_DECADE,
 
 
 ```{r}
+gt.comp <- gt.inc %>%
+  mutate(INSTALLATION_YEAR = parse_number(INSTALLATION_YEAR,                 
+                                          na = c("NA","UNKNOWN","N/A")),    
+         INSTALLATION_YEAR = replace_na(INSTALLATION_YEAR, 1930),           
+         INSTALLATION_DECADE = INSTALLATION_YEAR - INSTALLATION_YEAR %% 10,
+         INSTALLATION_DECADE = if_else(INSTALLATION_DECADE <= 1930, 1930, INSTALLATION_DECADE))%>%
+  filter(SIGNIFICANT == "YES",   
+         ON_OFF_SHORE == "ONSHORE",  
+         SYSTEM_PART_INVOLVED %in% c("ONSHORE PIPELINE, INCLUDING VALVE SITES" ,
+                                     "ONSHORE COMPRESSOR STATION EQUIPMENT AND PIPING"),
+         IYEAR !=2022,
+         IYEAR > 2011)%>%
+  left_join(gtMileNorm,                   
+            by = c("INSTALLATION_DECADE" = "name", "IYEAR" = "Calendar.Year"),             
+            keep = T)%>%                                                        
+  #filter(!is.na(value))%>%                                                  
+  group_by(INSTALLATION_DECADE, IYEAR)%>%                                       
+  summarise(n = n(),                                                         
+            miles = mean(value),                                             
+            ipm = n/(miles/1000)) %>%                                        
+  group_by(INSTALLATION_DECADE)%>%            
+  mutate(count = if_else(INSTALLATION_DECADE == 2020, 
+                         as.integer(2),
+                         as.integer(10)),
+         count.u = if_else(INSTALLATION_DECADE == 2020, 
+                         as.integer(5),
+                         as.integer(10)))%>%
+  summarise(total = sum(n),   
+            iyear = IYEAR, 
+            w.ipm = ipm * (n/total),   
+            count = count,
+            s.ipm = round(sum(w.ipm)*count,1),
+            u.ipm = round(mean(ipm)*count.u,1))%>%                            
+  distinct(INSTALLATION_DECADE,.keep_all = T)%>%                                
+  mutate(version = "+ Compressor Stations")
+
 gt.inc %>%
   mutate(INSTALLATION_YEAR = parse_number(INSTALLATION_YEAR,                 
                                           na = c("NA","UNKNOWN","N/A")),    
@@ -691,6 +727,117 @@ gt.inc %>%
          INSTALLATION_DECADE = INSTALLATION_YEAR - INSTALLATION_YEAR %% 10,
          INSTALLATION_DECADE = if_else(INSTALLATION_DECADE <= 1930, 1930, INSTALLATION_DECADE))%>%
   filter(SIGNIFICANT == "YES",   
+         ON_OFF_SHORE == "ONSHORE",  
+         SYSTEM_PART_INVOLVED == "ONSHORE PIPELINE, INCLUDING VALVE SITES" ,
+         IYEAR !=2022,
+         IYEAR > 2011)%>%
+  left_join(gtMileNorm,                   
+            by = c("INSTALLATION_DECADE" = "name", "IYEAR" = "Calendar.Year"),             
+            keep = T)%>%                                                        
+  #filter(!is.na(value))%>%                                                  
+  group_by(INSTALLATION_DECADE, IYEAR)%>%                                       
+  summarise(n = n(),                                                         
+            miles = mean(value),                                             
+            ipm = n/(miles/1000)) %>%                                        
+  group_by(INSTALLATION_DECADE)%>%            
+  mutate(count = if_else(INSTALLATION_DECADE == 2020, 
+                         as.integer(2),
+                         as.integer(10)),
+         count.u = if_else(INSTALLATION_DECADE == 2020, 
+                         as.integer(5),
+                         as.integer(10)))%>%
+  summarise(total = sum(n),   
+            iyear = IYEAR, 
+            w.ipm = ipm * (n/total),   
+            count = count,
+            s.ipm = round(sum(w.ipm)*count,1),
+            u.ipm = round(mean(ipm)*count.u,1))%>%                            
+  distinct(INSTALLATION_DECADE,.keep_all = T)%>%                                
+  mutate(version = "Pipeline & Valve Sites")%>%                                               
+  rbind(gt.comp)%>%                 
+  mutate(version = factor(version, levels = c("Pipeline & Valve Sites","+ Compressor Stations" )))%>%
+  ggplot(aes(x = INSTALLATION_DECADE, y = u.ipm, fill = version, group = version))+ 
+  geom_bar(stat = "identity", position = "dodge")+
+  geom_text(aes(label = u.ipm, family = pstFont), 
+            vjust = 1.5, colour = "white", position = position_dodge(width = 9.3), size = 2.7)+
+  theme_pst(baseSize = 12)+
+  scale_x_continuous(limits = c(1925,2025),
+                     breaks = seq(1930, 2010,20),
+                     labels = c("Pre-40s\n& Unkown",seq(1950,2010,20)))+
+  scale_fill_brewer(palette = "Paired", name = "Parts")+
+  labs(title = "Pipeline Incidents Per 1,000 Miles by Installation Decade",
+       subtitle = "Significant Incidents of Onshore Gas Transmission Lines from the 1940s to Present",
+       caption = capt,
+       tag = "PST 2022",
+       y = "Incidents per 1,000 Miles",
+       x = "Installation Decade")+
+  theme(legend.position = c(.75,.8))
+
+ggsave("bathtub-curve/exports/plots/PartsComp.png", width = wdt, height = hgt, units = "px")
+
+```
+
+```{r unknown phmsa?}
+#ok
+gtMileNormUk <- df.gt %>% 
+  filter(!State.Abbreviation %in% c("OCSAT", "OCSG","OCSP"))%>%
+  rename(X1930 = Trans.pre.1940.Onshore.Miles,
+         X1920 = Trans.Unknown.by.Dec.Onshore.Miles) %>%
+  select(Calendar.Year, starts_with("X"))%>%
+  filter(Calendar.Year >= 2010)%>%
+  group_by(Calendar.Year)%>%
+  summarise(across(c(1:11),~sum(.,na.rm = T))) %>%
+  pivot_longer(cols = starts_with("X"))%>%
+  mutate(name = parse_number(str_sub(name, 2,5)))
+
+
+  
+gt.unknown.group <- gt.inc %>%
+  mutate(INSTALLATION_YEAR = parse_number(INSTALLATION_YEAR,                 
+                                          na = c("NA","UNKNOWN","N/A")),    
+         INSTALLATION_YEAR = replace_na(INSTALLATION_YEAR, 1930),           
+         INSTALLATION_DECADE = INSTALLATION_YEAR - INSTALLATION_YEAR %% 10,
+         INSTALLATION_DECADE = if_else(INSTALLATION_DECADE <= 1930, 1930, INSTALLATION_DECADE))%>%
+  filter(SIGNIFICANT == "YES",   
+         ON_OFF_SHORE == "ONSHORE",  
+         SYSTEM_PART_INVOLVED == "ONSHORE PIPELINE, INCLUDING VALVE SITES" ,
+         IYEAR !=2022,
+         IYEAR > 2011)%>%
+  left_join(gtMileNorm,                   
+            by = c("INSTALLATION_DECADE" = "name", "IYEAR" = "Calendar.Year"),             
+            keep = T)%>%                                                        
+  #filter(!is.na(value))%>%                                                  
+  group_by(INSTALLATION_DECADE, IYEAR)%>%                                       
+  summarise(n = n(),                                                         
+            miles = mean(value),                                             
+            ipm = n/(miles/1000)) %>%                                        
+  group_by(INSTALLATION_DECADE)%>%            
+  mutate(count = if_else(INSTALLATION_DECADE == 2020, 
+                         as.integer(2),
+                         as.integer(10)),
+         count.u = if_else(INSTALLATION_DECADE == 2020, 
+                         as.integer(5),
+                         as.integer(10)))%>%
+  summarise(total = sum(n),   
+            iyear = IYEAR, 
+            w.ipm = ipm * (n/total),   
+            count = count,
+            s.ipm = round(sum(w.ipm)*count,1),
+            u.ipm = round(mean(ipm)*count.u,1))%>%                            
+  distinct(INSTALLATION_DECADE,.keep_all = T)%>%
+  ungroup()%>%
+  add_row(INSTALLATION_DECADE = 1920, u.ipm = 0.0)%>%
+  mutate(version = "Grouped")
+  
+  
+gt.unknown.split <- gt.inc %>%
+  #drop_na(INSTALLATION_YEAR)%>%
+  mutate(INSTALLATION_YEAR = parse_number(INSTALLATION_YEAR,na = c("NA","UNKNOWN")),             
+         INSTALLATION_DECADE = INSTALLATION_YEAR - INSTALLATION_YEAR %% 10,
+         INSTALLATION_DECADE = if_else(INSTALLATION_DECADE <= 1930, 1930, INSTALLATION_DECADE),
+         INSTALLATION_DECADE = replace_na(INSTALLATION_DECADE, 1920))%>%
+  filter(SIGNIFICANT == "YES",   
+         SYSTEM_PART_INVOLVED == "ONSHORE PIPELINE, INCLUDING VALVE SITES" ,
          ON_OFF_SHORE == "ONSHORE",  
          IYEAR !=2022,
          IYEAR > 2011)%>%
@@ -705,24 +852,35 @@ gt.inc %>%
   group_by(INSTALLATION_DECADE)%>%            
   mutate(count = if_else(INSTALLATION_DECADE == 2020, 
                          as.integer(2),
-                         as.integer(12)))%>%
+                         as.integer(10)))%>%
+  mutate(count = if_else(INSTALLATION_DECADE == 2020, 
+                         as.integer(2),
+                         as.integer(10)),
+         count.u = if_else(INSTALLATION_DECADE == 2020, 
+                         as.integer(5),
+                         as.integer(10)))%>%
   summarise(total = sum(n),   
             iyear = IYEAR, 
             w.ipm = ipm * (n/total),   
             count = count,
-            s.ipm = round(sum(w.ipm)*count,1))%>%                            
-  distinct(INSTALLATION_DECADE,.keep_all = T)%>%                                
-  mutate(version = "PST")%>%                                               
-  rbind(gtphmsa)%>%                                                        
-  ggplot(aes(x = INSTALLATION_DECADE, y = s.ipm, fill = version, group = version))+ 
+            s.ipm = round(sum(w.ipm)*count,1),
+            u.ipm = round(mean(ipm)*count.u,1))%>%                            
+  distinct(INSTALLATION_DECADE,.keep_all = T)%>%
+  mutate(version = "Separate")
+
+rbind(gt.unknown.split, gt.unknown.group)%>%   
+  ggplot(aes(x = INSTALLATION_DECADE, y = u.ipm, fill = version, group = version))+ 
   geom_bar(stat = "identity", position = "dodge")+
-  geom_text(aes(label = s.ipm, family = pstFont), 
-            vjust = 1.5, colour = "white", position = position_dodge(width = 9.3), size = 2.7)+
+  geom_text(aes(label = u.ipm, family = pstFont), 
+            vjust = 1.5, colour = "white", position = position_dodge(width = 9.3), size = 2.5)+
   theme_pst(baseSize = 12)+
-  scale_x_continuous(limits = c(1925,2025),
-                     breaks = seq(1930, 2010,20),
-                     labels = c("Pre-40s\n& Unkown",seq(1950,2010,20)))+
-  scale_fill_brewer(palette = "Set2")+
+  scale_x_continuous(limits = c(1915,2025),
+                     breaks = seq(1920, 2020,10),
+                     labels = c("Unknown", "Pre-40s", 
+                                paste0("'",seq(40,90,10),"s"),
+                                "'00s","'10s","'20s" ))+
+  scale_fill_brewer(palette = "Set2", name = "Pre-40s & Unknown")+
+  theme(legend.position = c(.85,.77))+
   labs(title = "Pipeline Incidents Per 1,000 Miles by Installation Decade",
        subtitle = "Significant Incidents of Onshore Gas Transmission Lines from the 1940s to Present",
        caption = capt,
@@ -730,9 +888,11 @@ gt.inc %>%
        y = "Incidents per 1,000 Miles",
        x = "Installation Decade")
 
-ggsave("./output/plots/SigInstallDecadeGT2.png", width = wdt, height = hgt, units = "px")
+ggsave("bathtub-curve/exports/plots/KnownComp.png", width = wdt, height = hgt, units = "px")
 
 ```
+
+
 
 ```{r}
 gt.inc %>%
